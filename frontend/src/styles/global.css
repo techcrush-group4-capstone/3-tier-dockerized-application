@@ -1,0 +1,43 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #f4f7fb;
+    color: #333;
+}
+
+a {
+    text-decoration: none;
+}
+
+ul {
+    list-style: none;
+}
+
+button {
+    cursor: pointer;
+}
+.page-container {
+    max-width: 900px;
+    margin: 60px auto;
+    padding: 20px;
+    line-height: 1.8;
+}
+
+.page-container h1 {
+    color: #2563eb;
+    margin-bottom: 20px;
+}
+
+.page-container ul {
+    margin-top: 20px;
+    margin-left: 25px;
+}
+
+.page-container li {
+    margin-bottom: 10px;
+}
