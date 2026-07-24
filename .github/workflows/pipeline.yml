@@ -27,7 +27,7 @@ jobs:
       # Example: a3f9c21 instead of "latest"
       - name: Set image tag
         id: vars
-        run: echo "sha_tag=$(echo $GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+        run: echo "sha_tag=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
 
       # STEP 5: Build and push the BACKEND image
       - name: Build and push backend image
@@ -48,9 +48,19 @@ jobs:
           tags: |
             YOUR_DOCKERHUB_USERNAME/formflow-frontend:${{ steps.vars.outputs.sha_tag }}
             YOUR_DOCKERHUB_USERNAME/formflow-frontend:latest
-deploy:
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # build steps
+
+  deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+
+    steps:
+      # deploy steps
 
     steps:
        #STEP 7: SSH into the Azure VM and redeploy using the new images
@@ -61,7 +71,8 @@ deploy:
            username: ${{ secrets.VM_USERNAME }}
            key: ${{ secrets.VM_SSH_KEY }}
            script: |
-             cd /home/YOUR_VM_USERNAME/3-tier-dockerized-application
+             # TODO: Replace 'azureuser' with the actual Azure VM username
+             cd /home/azureuser/3-tier-dockerized-application
              docker compose pull
              docker compose up -d
                      
