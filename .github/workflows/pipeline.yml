@@ -7,24 +7,24 @@ on:
     branches:
       - develop
       - main
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
 
     steps:
-     # STEP 2: Get the latest code from the repo
+      # STEP 2: Get the latest code from the repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # STEP 3: Log in to Docker Hub using secrets (never hardcode passwords)
+      # STEP 3: Log in to Docker Hub using secrets
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # STEP 4: Create a short, unique tag from the Git commit SHA
-      # Example: a3f9c21 instead of "latest"
+      # STEP 4: Create a short image tag from the Git commit SHA
       - name: Set image tag
         id: vars
         run: echo "sha_tag=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
@@ -36,8 +36,8 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            YOUR_DOCKERHUB_USERNAME/formflow-backend:${{ steps.vars.outputs.sha_tag }}
-            YOUR_DOCKERHUB_USERNAME/formflow-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/formflow-backend:${{ steps.vars.outputs.sha_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/formflow-backend:latest
 
       # STEP 6: Build and push the FRONTEND image
       - name: Build and push frontend image
@@ -46,33 +46,23 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            YOUR_DOCKERHUB_USERNAME/formflow-frontend:${{ steps.vars.outputs.sha_tag }}
-            YOUR_DOCKERHUB_USERNAME/formflow-frontend:latest
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-
-    steps:
-      # build steps
+            ${{ secrets.DOCKERHUB_USERNAME }}/formflow-frontend:${{ steps.vars.outputs.sha_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/formflow-frontend:latest
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
-      # deploy steps
-
-    steps:
-       #STEP 7: SSH into the Azure VM and redeploy using the new images
-       - name: Deploy to Azure VM
-         uses: appleboy/ssh-action@v1.0.0
-         with:
-           host: ${{ secrets.VM_HOST }}
-           username: ${{ secrets.VM_USERNAME }}
-           key: ${{ secrets.VM_SSH_KEY }}
-           script: |
-             # TODO: Replace 'azureuser' with the actual Azure VM username
-             cd /home/azureuser/3-tier-dockerized-application
-             docker compose pull
-             docker compose up -d
-                     
+      # STEP 7: SSH into the Azure VM and redeploy using the new images
+      - name: Deploy to Azure VM
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            # TODO: Replace 'azureuser' with the actual Azure VM username
+            cd /home/azureuser/3-tier-dockerized-application
+            docker compose pull
+            docker compose up -d
