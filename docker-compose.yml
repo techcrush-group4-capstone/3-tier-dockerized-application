@@ -26,6 +26,7 @@ services:
       PG_HOST: postgres
       PG_PORT: 5432
       PG_DATABASE: ${PG_DATABASE}
+      DATABASE_URL: postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/${PG_DATABASE}
     depends_on:
       - postgres
     ports:
