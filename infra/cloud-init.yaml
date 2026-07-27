@@ -1,0 +1,21 @@
+#cloud-config
+# This file is used by the VM at startup to automatically install Docker.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - git
+
+runcmd:
+  # Download and run the official Docker install script
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sh get-docker.sh
+  
+  # Add the default Azure user to the docker group so sudo isn't required
+  - usermod -aG docker azureuser
+  
+  # Ensure Docker service is running and enabled on boot
+  - systemctl enable docker
+  - systemctl start docker
