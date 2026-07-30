@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      PORT: 4000
       PG_USER: ${PG_USER}
       PG_PASSWORD: ${PG_PASSWORD}
       PG_HOST: postgres
@@ -40,6 +41,8 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    environment:  
+      BACKEND_URL: "backend:4000"
     ports:
       - "3000:80"
 
