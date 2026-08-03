@@ -264,6 +264,16 @@ jobs:
             fi
 
             cd /opt/formflow
+
+            # Write .env for docker-compose
+            cat > .env <<EOF
+            PG_USER=${{ secrets.PG_USER }}
+            PG_PASSWORD=${{ secrets.PG_PASSWORD }}
+            PG_DATABASE=${{ secrets.PG_DATABASE }}
+            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+            IMAGE_TAG=${{ needs.tag.outputs.sha_tag }}
+            EOF
+
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
             # Pull all three tier images with specific SHA tags (never 'latest')
