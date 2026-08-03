@@ -48,9 +48,27 @@ if [ ! -f "$PROJECT_ROOT/.env" ]; then
 fi
 echo "[3/4] .env file will be synced with the project files."
 
-# Step 4: SSH into the VM and run docker compose
-echo "[4/4] Building and starting containers on the VM..."
-$SSH_CMD "cd $APP_DIR && sudo docker compose up -d --build"
+# Step 4: Wait for Docker to be installed by cloud-init, then run compose
+echo "[4/4] Waiting for Docker to be ready on the VM..."
+$SSH_CMD "
+  retries=12
+  while [ \$retries -gt 0 ]; do
+    if command -v docker >/dev/null 2>&1; then
+      echo 'Docker is ready!'
+      break
+    fi
+    echo 'Docker not yet installed (cloud-init still running). Retrying in 10s...'
+    sleep 10
+    retries=\$((retries - 1))
+  done
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo 'ERROR: Docker was not installed after 2 minutes. Check cloud-init logs.'
+    exit 1
+  fi
+
+  cd $APP_DIR && sudo docker compose up -d --build
+"
 
 echo ""
 echo "============================================================"

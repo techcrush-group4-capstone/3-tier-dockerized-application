@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME:-local}/formflow-database:${IMAGE_TAG:-latest}
     container_name: formflow-db
     restart: unless-stopped
     environment:
@@ -9,7 +12,6 @@ services:
       POSTGRES_DB: ${PG_DATABASE}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./database/database.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
 
