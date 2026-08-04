@@ -19,6 +19,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME:-local}/formflow-backend:${IMAGE_TAG:-latest}
     container_name: formflow-backend
     restart: unless-stopped
     environment:
@@ -39,6 +40,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME:-local}/formflow-frontend:${IMAGE_TAG:-latest}
     container_name: formflow-frontend
     restart: unless-stopped
     depends_on:
