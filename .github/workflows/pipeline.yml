@@ -247,7 +247,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_SSH_KEY }}
           source:   "docker-compose.yml"
-          target:   "/opt/formflow"
+          target:   "/tmp"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -273,6 +273,7 @@ jobs:
             fi
 
             cd /opt/formflow
+            mv /tmp/docker-compose.yml .
 
             # Write .env for docker-compose
             cat > .env <<EOF
