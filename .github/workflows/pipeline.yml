@@ -1,0 +1,302 @@
+name: FormFlow CI/CD Pipeline
+
+on:
+  push:
+    branches: [github-actions-test]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'database/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/pipeline.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'database/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/pipeline.yml'
+
+env:
+  REGISTRY: docker.io
+  FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/formflow-frontend
+  BACKEND_IMAGE:  ${{ secrets.DOCKERHUB_USERNAME }}/formflow-backend
+  DATABASE_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/formflow-database
+
+jobs:
+  checkout:
+    name: Checkout Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+  tag:
+    name: Generate Git SHA Tag
+    runs-on: ubuntu-latest
+    needs: checkout
+    outputs:
+      sha_tag: ${{ steps.sha.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set short SHA
+        id: sha
+        run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+  lint-backend:
+    name: Lint Backend
+    runs-on: ubuntu-latest
+    needs: checkout
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx eslint . --ext .js || true
+
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    needs: checkout
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx eslint src --ext .js,.jsx || true
+
+  build-backend:
+    name: Build & Push Backend Image
+    runs-on: ubuntu-latest
+    needs: [tag, lint-backend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ needs.tag.outputs.sha_tag }}
+            ${{ env.BACKEND_IMAGE }}:stable
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  build-frontend:
+    name: Build & Push Frontend Image
+    runs-on: ubuntu-latest
+    needs: [tag, lint-frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ needs.tag.outputs.sha_tag }}
+            ${{ env.FRONTEND_IMAGE }}:stable
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  build-database:
+    name: Build & Push Database Image
+    runs-on: ubuntu-latest
+    needs: [tag, checkout]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push database
+        uses: docker/build-push-action@v5
+        with:
+          context: ./database
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.DATABASE_IMAGE }}:${{ needs.tag.outputs.sha_tag }}
+            ${{ env.DATABASE_IMAGE }}:stable
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  integration-test:
+    name: Integration Test (docker compose)
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend, build-database]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env for CI
+        run: |
+          cat > .env <<EOF
+          PG_USER=postgres
+          PG_PASSWORD=ci_password
+          PG_DATABASE=todo
+          EOF
+
+      - name: Build images locally
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up -d
+
+      - name: Wait for backend to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T backend wget -qO- http://localhost:5000/todos; then
+              echo "Backend is up"; break
+            fi
+            echo "Waiting... ($i/30)"; sleep 3
+          done
+
+      - name: Smoke test – GET /todos via Nginx
+        run: curl -sf http://localhost/todos
+
+      - name: Smoke test – POST /todos via Nginx
+        run: |
+          curl -sf -X POST http://localhost/todos \
+            -H "Content-Type: application/json" \
+            -d '{"description":"CI smoke test todo"}'
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v
+
+  security-scan:
+    name: Security Scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend, build-database]
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.BACKEND_IMAGE }}:stable"
+          format: table
+          exit-code: "0"
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.FRONTEND_IMAGE }}:stable"
+          format: table
+          exit-code: "0"
+
+      - name: Scan database image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.DATABASE_IMAGE }}:stable"
+          format: table
+          exit-code: "0"
+
+  deploy:
+    name: Deploy & Health Check
+    runs-on: ubuntu-latest
+    needs: [tag, integration-test, security-scan]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/github-actions-test') || (github.event_name == 'pull_request' && github.base_ref == 'main')
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy docker-compose.yml to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          source:   "docker-compose.yml"
+          target:   "/tmp"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            # Wait for Docker to be ready (cloud-init may still be running on fresh VMs)
+            retries=12
+            while [ $retries -gt 0 ]; do
+              if command -v docker >/dev/null 2>&1; then
+                echo "Docker is ready!"
+                break
+              fi
+              echo "Docker not yet installed (cloud-init still running). Retrying in 10s..."
+              sleep 10
+              retries=$((retries - 1))
+            done
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "ERROR: Docker was not installed after 2 minutes. Check cloud-init logs."
+              exit 1
+            fi
+
+            cd /opt/formflow
+            mv /tmp/docker-compose.yml .
+
+            # Write .env for docker-compose
+            cat > .env <<EOF
+            PG_USER=${{ secrets.PG_USER }}
+            PG_PASSWORD=${{ secrets.PG_PASSWORD }}
+            PG_DATABASE=${{ secrets.PG_DATABASE }}
+            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+            IMAGE_TAG=${{ needs.tag.outputs.sha_tag }}
+            EOF
+
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+            # Pull all three tier images with specific SHA tags (never 'latest')
+            docker pull ${{ env.BACKEND_IMAGE }}:${{ needs.tag.outputs.sha_tag }}
+            docker pull ${{ env.FRONTEND_IMAGE }}:${{ needs.tag.outputs.sha_tag }}
+            docker pull ${{ env.DATABASE_IMAGE }}:${{ needs.tag.outputs.sha_tag }}
+
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker compose ps
+
+      - name: Health check – GET /todos
+        run: |
+          sleep 10
+          curl -sf http://${{ secrets.DEPLOY_HOST }}/todos || \
+            (echo "Health check failed!" && exit 1)

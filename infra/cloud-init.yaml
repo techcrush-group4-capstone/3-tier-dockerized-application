@@ -12,6 +12,9 @@ runcmd:
   - curl -fsSL https://get.docker.com -o get-docker.sh
   - sh get-docker.sh
 
+  # Install the Docker Compose V2 plugin
+  - apt-get install -y docker-compose-plugin docker-buildx-plugin
+
   - usermod -aG docker azureuser
 
   - systemctl enable docker
