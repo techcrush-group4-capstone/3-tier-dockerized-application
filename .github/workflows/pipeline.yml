@@ -215,7 +215,7 @@ jobs:
         with:
           image-ref: "${{ env.BACKEND_IMAGE }}:stable"
           format: table
-          exit-code: "0"   # informational; set to 1 to block on HIGH/CRITICAL
+          exit-code: "0"
 
       - name: Scan frontend image
         uses: aquasecurity/trivy-action@master
@@ -235,7 +235,7 @@ jobs:
     name: Deploy & Health Check
     runs-on: ubuntu-latest
     needs: [tag, integration-test, security-scan]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/github-actions-test'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/github-actions-test') || (github.event_name == 'pull_request' && github.base_ref == 'main')
     environment: production
     steps:
       - uses: actions/checkout@v4
