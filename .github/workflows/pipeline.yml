@@ -306,7 +306,7 @@ jobs:
             echo "Waiting for services to start..."
             sleep 10
             
-            if ! curl -sf http://localhost/todos; then
+            if ! curl -sf http://localhost/; then
               echo "Health check failed! Initiating automatic rollback..."
               if [ -n "$OLD_TAG" ]; then
                 echo "Rolling back to IMAGE_TAG=$OLD_TAG"
