@@ -273,6 +273,13 @@ jobs:
             fi
 
             cd /opt/formflow
+
+            # Keep a backup of the old .env file just in case for rollback
+            if [ -f .env ]; then
+              cp .env .env.backup
+              OLD_TAG=$(grep IMAGE_TAG .env | cut -d '=' -f2)
+            fi
+
             mv /tmp/docker-compose.yml .
 
             # Write .env for docker-compose
@@ -295,8 +302,21 @@ jobs:
             docker compose up -d --remove-orphans
             docker compose ps
 
-      - name: Health check – GET /todos
-        run: |
-          sleep 10
-          curl -sf http://${{ secrets.DEPLOY_HOST }}/todos || \
-            (echo "Health check failed!" && exit 1)
+            # Health Check and Automatic Rollback
+            echo "Waiting for services to start..."
+            sleep 10
+            
+            if ! curl -sf http://localhost/todos; then
+              echo "Health check failed! Initiating automatic rollback..."
+              if [ -n "$OLD_TAG" ]; then
+                echo "Rolling back to IMAGE_TAG=$OLD_TAG"
+                mv .env.backup .env
+                docker compose up -d --remove-orphans
+                echo "Rollback complete."
+              else
+                echo "No previous version found for rollback."
+              fi
+              exit 1
+            fi
+            
+            echo "Deployment successful!"
